@@ -5,7 +5,7 @@ const CompileStep = std.Build.Step.Compile;
 /// set this to true to link libc
 const should_link_libc = false;
 
-const required_zig_version = std.SemanticVersion.parse("0.12.0-dev.1754+2a3226453") catch unreachable;
+const required_zig_version = std.SemanticVersion.parse("0.14.0-dev.2367+aa7d13846") catch unreachable;
 
 fn linkObject(b: *Build, obj: *CompileStep) void {
     if (should_link_libc) obj.linkLibC();
@@ -29,12 +29,13 @@ pub fn build(b: *Build) void {
     const generate = b.step("generate", "Generate stub files from template/template.zig");
     const build_generate = b.addExecutable(.{
         .name = "generate",
-        .root_source_file = .{ .path = "template/generate.zig" },
+        .target = target,
+        .root_source_file = .{ .src_path = .{ .owner = b, .sub_path = "template/generate.zig" } },
         .optimize = .ReleaseSafe,
     });
 
     const run_generate = b.addRunArtifact(build_generate);
-    run_generate.setCwd(.{ .path = std.fs.path.dirname(@src().file).? });
+    run_generate.setCwd(.{ .src_path = .{ .owner = b, .sub_path = "" } });
     generate.dependOn(&run_generate.step);
 
     // Set up an exe for each day
@@ -45,7 +46,7 @@ pub fn build(b: *Build) void {
 
         const exe = b.addExecutable(.{
             .name = dayString,
-            .root_source_file = .{ .path = zigFile },
+            .root_source_file = .{ .src_path = .{ .owner = b, .sub_path = zigFile } },
             .target = target,
             .optimize = mode,
         });
@@ -54,7 +55,7 @@ pub fn build(b: *Build) void {
         const install_cmd = b.addInstallArtifact(exe, .{});
 
         const build_test = b.addTest(.{
-            .root_source_file = .{ .path = zigFile },
+            .root_source_file = .{ .src_path = .{ .owner = b, .sub_path = zigFile } },
             .target = target,
             .optimize = mode,
         });
@@ -92,7 +93,7 @@ pub fn build(b: *Build) void {
     {
         const test_util = b.step("test_util", "Run tests in util.zig");
         const test_cmd = b.addTest(.{
-            .root_source_file = .{ .path = "src/util.zig" },
+            .root_source_file = .{ .src_path = .{ .owner = b, .sub_path = "src/util.zig" } },
             .target = target,
             .optimize = mode,
         });
