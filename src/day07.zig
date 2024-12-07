@@ -1,46 +1,126 @@
 const std = @import("std");
-const Allocator = std.mem.Allocator;
-const List = std.ArrayList;
-const Map = std.AutoHashMap;
-const StrMap = std.StringHashMap;
-const BitSet = std.DynamicBitSet;
 
-const util = @import("util.zig");
-const gpa = util.gpa;
+const MaxParameters = 32;
 
 const data = @embedFile("data/day07.txt");
 
-pub fn main() !void {
+const Op = enum(u8) {
+    Concat = 0,
+    Add = 1,
+    Mul = 2,
+};
+
+const CalibrationTester = struct {
+    sum_valid_equations: u64 = 0,
+    op_at_pos: [MaxParameters]u8 = undefined,
+
+    fn checkEquation(self: *CalibrationTester,  parameters: []const u64, invalid_ops: []const u8) void {
+        const test_value = parameters[0];
+        const num_args = parameters.len-1;
+        self.resetCombos();
+
+        // Testing parameters.
+        const num_ops = std.meta.fields(Op).len;
+        const num_combinations = std.math.pow(u64, num_ops, @intCast(num_args-1));
+        const op_at_pos = self.op_at_pos[0..num_args-1]; 
+
+        for(0..num_combinations) | _ | {
+            if(self.comboIsInvalid(op_at_pos, invalid_ops)) {
+                self.nextOpCombo();
+                continue;
+            }
+
+            var sum: u64 = parameters[1];
+
+            for (2..parameters.len, 0..num_args-1) |i, j | {
+                const op: Op =  @enumFromInt(self.op_at_pos[j]);
+
+                sum = switch (op) {
+                    Op.Add => sum + parameters[i],
+                    Op.Mul => sum * parameters[i],
+                    Op.Concat => concat(sum, parameters[i]),
+                };
+            }
+
+            if (sum == test_value) {
+                self.sum_valid_equations += test_value;
+                return;
+            }
+
+            self.nextOpCombo();
+        }
+    }
+
+    fn resetCombos(self: *CalibrationTester) void {
+        for (0..self.op_at_pos.len) | i | {
+            self.op_at_pos[i] = 0;
+        }
+    }
+
+    fn nextOpCombo(self: *CalibrationTester) void {
+        for (0..self.op_at_pos.len) |i |  {
+        self.op_at_pos[i] += 1;
+
+        if (self.op_at_pos[i] >= std.meta.fields(Op).len) { 
+            self.op_at_pos[i] = 0;
+            continue;
+        }
+
+        return;
+        
+        }
+    }
+
+    fn comboIsInvalid(_: *CalibrationTester, ops: []const u8, invalid_ops: []const u8) bool {
+        if (invalid_ops.len == 0 ) {
+            return false;
+        }
+
+        for (ops) | op | {
+            for (invalid_ops) |invalid_op | {
+                if (op == invalid_op) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+};
+
+fn concat(x: u64, y: u64) u64 { 
+    var pow: u64 = 10;
+
+    while(y >= pow) {
+        pow *= 10;
+    }
     
+    return x * pow + y;   
 }
 
-// Useful stdlib functions
-const tokenizeAny = std.mem.tokenizeAny;
-const tokenizeSeq = std.mem.tokenizeSequence;
-const tokenizeSca = std.mem.tokenizeScalar;
-const splitAny = std.mem.splitAny;
-const splitSeq = std.mem.splitSequence;
-const splitSca = std.mem.splitScalar;
-const indexOf = std.mem.indexOfScalar;
-const indexOfAny = std.mem.indexOfAny;
-const indexOfStr = std.mem.indexOfPosLinear;
-const lastIndexOf = std.mem.lastIndexOfScalar;
-const lastIndexOfAny = std.mem.lastIndexOfAny;
-const lastIndexOfStr = std.mem.lastIndexOfLinear;
-const trim = std.mem.trim;
-const sliceMin = std.mem.min;
-const sliceMax = std.mem.max;
+pub fn main() !void {
+    var timer = try std.time.Timer.start();
 
-const parseInt = std.fmt.parseInt;
-const parseFloat = std.fmt.parseFloat;
+    var parameters: [MaxParameters]u64 = undefined;
 
-const print = std.debug.print;
-const assert = std.debug.assert;
+    var c1 = CalibrationTester{};
+var c2 = CalibrationTester{};
 
-const sort = std.sort.block;
-const asc = std.sort.asc;
-const desc = std.sort.desc;
+    var lines = std.mem.tokenizeAny(u8, data,  "\n");
 
-// Generated from template/template.zig.
-// Run `zig build generate` to update.
-// Only unmodified days will be updated.
+    while(lines.next()) | line | {
+        var n: usize = 0;
+        var numbers = std.mem.tokenizeAny(u8, line, ": ");
+
+        while(numbers.next()) | number | : ( n += 1 ){
+            parameters[n] = try std.fmt.parseUnsigned(u64, number, 10);
+        }
+
+        c1.checkEquation(parameters[0..n], &[_]u8{0});
+        c2.checkEquation(parameters[0..n], &[_]u8{});
+    }
+
+    std.debug.print("day01\tpart 1\t{d}\n", .{c1.sum_valid_equations});
+    std.debug.print("day01\tpart 2\t{d}\n", .{c2.sum_valid_equations});
+    std.debug.print("total time\t{}\n", .{std.fmt.fmtDuration(timer.read())});
+}
