@@ -5,119 +5,89 @@ const MaxParameters = 32;
 const data = @embedFile("data/day07.txt");
 
 const Op = enum(u8) {
-    Concat = 0,
-    Add = 1,
-    Mul = 2,
+    Add = 0,
+    Mul = 1,
+    Concat = 2,
 };
+
+fn concat(x: u64, y: u64) u64 {
+    inline for ([_]u64{ 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11, 1e12, 1e13, 1e14, 1e15 }) |pow| {
+        if (y < pow) {
+            return x * pow + y;
+        }
+    }
+
+    var pow: u64 = 1e16;
+    while (y >= pow) pow *= 10;
+
+    return x * pow + y;
+}
 
 const CalibrationTester = struct {
+    allowed_ops: []const Op,
     sum_valid_equations: u64 = 0,
-    op_at_pos: [MaxParameters]u8 = undefined,
+    sum_updated: bool = false,
 
-    fn checkEquation(self: *CalibrationTester,  parameters: []const u64, invalid_ops: []const u8) void {
-        const test_value = parameters[0];
-        const num_args = parameters.len-1;
-        self.resetCombos();
+    fn checkEquation(self: *CalibrationTester, test_value: u64, parameters: []const u64) bool {
+        self.sum_updated = false;
 
-        // Testing parameters.
-        const num_ops = std.meta.fields(Op).len;
-        const num_combinations = std.math.pow(u64, num_ops, @intCast(num_args-1));
-        const op_at_pos = self.op_at_pos[0..num_args-1]; 
+        for (self.allowed_ops) |next_op| {
+            self.evaluate(test_value, parameters[0], parameters[1..], next_op);
+        }
 
-        for(0..num_combinations) | _ | {
-            if(self.comboIsInvalid(op_at_pos, invalid_ops)) {
-                self.nextOpCombo();
-                continue;
-            }
+        return self.sum_updated;
+    }
 
-            var sum: u64 = parameters[1];
+    fn evaluate(self: *CalibrationTester, test_value: u64, sum: u64, parameters: []const u64, op: Op) void {
+        if (sum > test_value) {
+            return;
+        }
 
-            for (2..parameters.len, 0..num_args-1) |i, j | {
-                const op: Op =  @enumFromInt(self.op_at_pos[j]);
+        const next_param = parameters[0];
 
-                sum = switch (op) {
-                    Op.Add => sum + parameters[i],
-                    Op.Mul => sum * parameters[i],
-                    Op.Concat => concat(sum, parameters[i]),
-                };
-            }
+        const updated_sum = switch (op) {
+            Op.Concat => concat(sum, next_param),
+            Op.Mul => sum * next_param,
+            Op.Add => sum + next_param,
+        };
 
-            if (sum == test_value) {
+        if (parameters.len <= 1) {
+            if (test_value == updated_sum and !self.sum_updated) {
                 self.sum_valid_equations += test_value;
-                return;
+                self.sum_updated = true;
             }
 
-            self.nextOpCombo();
-        }
-    }
-
-    fn resetCombos(self: *CalibrationTester) void {
-        for (0..self.op_at_pos.len) | i | {
-            self.op_at_pos[i] = 0;
-        }
-    }
-
-    fn nextOpCombo(self: *CalibrationTester) void {
-        for (0..self.op_at_pos.len) |i |  {
-        self.op_at_pos[i] += 1;
-
-        if (self.op_at_pos[i] >= std.meta.fields(Op).len) { 
-            self.op_at_pos[i] = 0;
-            continue;
+            return;
         }
 
-        return;
-        
+        for (self.allowed_ops) |next_op| {
+            self.evaluate(test_value, updated_sum, parameters[1..], next_op);
         }
-    }
-
-    fn comboIsInvalid(_: *CalibrationTester, ops: []const u8, invalid_ops: []const u8) bool {
-        if (invalid_ops.len == 0 ) {
-            return false;
-        }
-
-        for (ops) | op | {
-            for (invalid_ops) |invalid_op | {
-                if (op == invalid_op) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
     }
 };
-
-fn concat(x: u64, y: u64) u64 { 
-    var pow: u64 = 10;
-
-    while(y >= pow) {
-        pow *= 10;
-    }
-    
-    return x * pow + y;   
-}
 
 pub fn main() !void {
     var timer = try std.time.Timer.start();
 
+    var c1 = CalibrationTester{ .allowed_ops = &[_]Op{ .Mul, .Add } };
+    var c2 = CalibrationTester{ .allowed_ops = &[_]Op{ .Concat, .Mul, .Add } };
+
     var parameters: [MaxParameters]u64 = undefined;
+    var lines = std.mem.tokenizeAny(u8, data, "\n");
 
-    var c1 = CalibrationTester{};
-var c2 = CalibrationTester{};
-
-    var lines = std.mem.tokenizeAny(u8, data,  "\n");
-
-    while(lines.next()) | line | {
+    while (lines.next()) |line| {
         var n: usize = 0;
         var numbers = std.mem.tokenizeAny(u8, line, ": ");
 
-        while(numbers.next()) | number | : ( n += 1 ){
+        while (numbers.next()) |number| : (n += 1) {
             parameters[n] = try std.fmt.parseUnsigned(u64, number, 10);
         }
 
-        c1.checkEquation(parameters[0..n], &[_]u8{0});
-        c2.checkEquation(parameters[0..n], &[_]u8{});
+        if (c1.checkEquation(parameters[0], parameters[1..n])) {
+            c2.sum_valid_equations += parameters[0];
+        } else {
+            _ = c2.checkEquation(parameters[0], parameters[1..n]);
+        }
     }
 
     std.debug.print("day01\tpart 1\t{d}\n", .{c1.sum_valid_equations});
